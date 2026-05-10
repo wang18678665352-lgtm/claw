@@ -173,18 +173,29 @@ const INITIAL_EP_ID = epMatch ? epMatch[1] : null;
         videoOk = true;
       } catch (e) {
         console.log(`  ✗ 视频下载失败: ${e.message}`);
-      }
-      try {
-        // 音频 CDN 阻断 Node.js TLS 指纹，用浏览器网络栈下载
-        await downloadViaBrowser(page, bestAudio.baseUrl || bestAudio.base_url, audioFile, epUrl);
-        audioOk = true;
-      } catch (e) {
-        console.log(`  ✗ 音频下载失败: ${e.message}`);
+        // 部分视频 CDN 也封 Node.js TLS，尝试浏览器下载
+        if (e.message.includes('TLS') || e.message.includes('socket')) {
+          try {
+            console.log(`  改用浏览器下载视频...`);
+            await downloadViaBrowser(page, bestVideo.baseUrl || bestVideo.base_url, videoFile, epUrl);
+            videoOk = true;
+          } catch (e2) {
+            console.log(`  ✗ 浏览器下载也失败: ${e2.message}`);
+          }
+        }
       }
 
       if (!videoOk) {
         console.log(`  ✗ 视频未下载，跳过`);
         continue;
+      }
+
+      // 视频下载成功后再下音频
+      try {
+        await downloadViaBrowser(page, bestAudio.baseUrl || bestAudio.base_url, audioFile, epUrl);
+        audioOk = true;
+      } catch (e) {
+        console.log(`  ✗ 音频下载失败: ${e.message}`);
       }
 
       if (audioOk) {
