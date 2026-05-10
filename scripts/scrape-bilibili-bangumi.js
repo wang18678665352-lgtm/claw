@@ -166,12 +166,41 @@ const INITIAL_EP_ID = epMatch ? epMatch[1] : null;
       const videoFile = path.join(outDir, `${sanitize(epTitle)}_video.m4s`);
       const audioFile = path.join(outDir, `${sanitize(epTitle)}_audio.m4s`);
 
-      await downloadFile(bestVideo.baseUrl || bestVideo.base_url, videoFile, epUrl);
-      await downloadFile(bestAudio.baseUrl || bestAudio.base_url, audioFile, epUrl);
+      // 同时下载音视频
+      let videoOk = false, audioOk = false;
+      try {
+        await downloadFile(bestVideo.baseUrl || bestVideo.base_url, videoFile, epUrl);
+        videoOk = true;
+      } catch (e) {
+        console.log(`  ✗ 视频下载失败: ${e.message}`);
+      }
+      try {
+        await downloadFile(bestAudio.baseUrl || bestAudio.base_url, audioFile, epUrl);
+        audioOk = true;
+      } catch (e) {
+        console.log(`  ✗ 音频下载失败: ${e.message}`);
+      }
 
-      console.log(`  合并音视频...`);
-      await mergeFiles(videoFile, audioFile, epFile);
-      console.log(`  ✓ 完成`);
+      if (!videoOk) {
+        console.log(`  ✗ 视频未下载，跳过`);
+        continue;
+      }
+
+      if (audioOk) {
+        console.log(`  合并音视频...`);
+        try {
+          await mergeFiles(videoFile, audioFile, epFile);
+          console.log(`  ✓ 完成`);
+          continue;
+        } catch (e) {
+          console.log(`  ✗ 合并失败: ${e.message}`);
+        }
+      }
+
+      // 没有音频或合并失败：至少把视频 remux 成可播放的 MP4
+      console.log(`  转码视频到 MP4（无音频）...`);
+      remuxVideo(videoFile, epFile);
+      console.log(`  ✓ 完成（无音频）`);
     } catch (e) {
       console.log(`  ✗ 错误: ${e.message}`);
     }
@@ -328,6 +357,29 @@ function mergeFiles(videoFile, audioFile, outputFile) {
       reject(new Error('ffmpeg 合并失败，保留 m4s 文件供手动合并'));
     }
   });
+}
+
+/**
+ * 仅有视频流时 remux 成可播放的 MP4（无音频）
+ */
+function remuxVideo(videoFile, outputFile) {
+  const { execSync } = require('child_process');
+  let ffmpegPath = 'ffmpeg';
+  try {
+    ffmpegPath = require('@ffmpeg-installer/ffmpeg').path;
+  } catch {}
+  try {
+    execSync(
+      `"${ffmpegPath}" -y -i "${videoFile}" -c copy "${outputFile}"`,
+      { stdio: 'ignore', timeout: 300000 }
+    );
+    fs.unlinkSync(videoFile);
+  } catch {
+    // ffmpeg 也不行就直接改后缀
+    try {
+      fs.renameSync(videoFile, outputFile);
+    } catch {}
+  }
 }
 
 function fmtSize(bytes) {

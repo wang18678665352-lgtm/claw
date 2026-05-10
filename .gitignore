@@ -32,3 +32,6 @@ debug-copy.png
 *.md
 bilibili-Claude Code + Playwright = 疯狂的/
 zhihu-*/
+
+# Downloaded bangumi episodes
+bangumi-*/
