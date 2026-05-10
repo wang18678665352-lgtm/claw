@@ -16,6 +16,9 @@ package-lock.json
 .claude/
 .omc/
 
+# Auth state (cookies, login sessions)
+.auth/
+
 # GitHub workflows (not scripts)
 .github/
 
