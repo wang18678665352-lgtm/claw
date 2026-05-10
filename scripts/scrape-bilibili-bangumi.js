@@ -175,7 +175,8 @@ const INITIAL_EP_ID = epMatch ? epMatch[1] : null;
         console.log(`  ✗ 视频下载失败: ${e.message}`);
       }
       try {
-        await downloadFile(bestAudio.baseUrl || bestAudio.base_url, audioFile, epUrl);
+        // 音频 CDN 阻断 Node.js TLS 指纹，用浏览器网络栈下载
+        await downloadViaBrowser(page, bestAudio.baseUrl || bestAudio.base_url, audioFile, epUrl);
         audioOk = true;
       } catch (e) {
         console.log(`  ✗ 音频下载失败: ${e.message}`);
@@ -264,6 +265,37 @@ async function getDashForEpisode(page, epId, aid, cid) {
   }, { epId, aid, cid });
 
   return dash;
+}
+
+/**
+ * 通过浏览器页面下载文件（绕过 Node.js TLS 指纹封锁）
+ * 使用 page.request 走 Chromium 原生网络栈，配合浏览器完整 cookie
+ */
+async function downloadViaBrowser(page, url, dest, referer) {
+  for (let i = 0; i < 3; i++) {
+    try {
+      const resp = await page.request.get(url, {
+        headers: {
+          Referer: referer || 'https://www.bilibili.com',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        },
+      });
+      if (!resp.ok()) throw new Error(`HTTP ${resp.status()}`);
+      const total = parseInt(resp.headers()['content-length'] || '0', 10);
+      const buffer = await resp.body();
+      fs.writeFileSync(dest, buffer);
+      if (total) {
+        console.log(`  音频已下载 (${fmtSize(buffer.length)}/${fmtSize(total)})`);
+      } else {
+        console.log(`  音频已下载 (${fmtSize(buffer.length)})`);
+      }
+      return;
+    } catch (e) {
+      if (i === 2) throw e;
+      console.log(`  TLS 断开，第${i + 2}次重试音频... (${e.message})`);
+      await new Promise(r => setTimeout(r, 2000 * (i + 1)));
+    }
+  }
 }
 
 /**
