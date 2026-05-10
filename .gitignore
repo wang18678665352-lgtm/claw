@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# Playwright test artifacts
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/playwright/.auth/
+
+# Browser profile
+.browser-profile/
+
+# AI assistant config
+.claude/
+.omc/
+
+# GitHub workflows (not scripts)
+.github/
+
+# Downloaded media & files
+downloads/
+images-REZE/
+images-cat/
+debug-copy.png
+
+# Notes & articles
+*.md
+bilibili-Claude Code + Playwright = 疯狂的/
+zhihu-*/
