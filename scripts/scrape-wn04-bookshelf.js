@@ -201,9 +201,11 @@ async function getAlbumTitle(aid) {
 // ========== 下载单个专辑 ==========
 
 async function downloadAlbum(aid, title, destDir, page) {
-  const existing = fs.existsSync(destDir) ? fs.readdirSync(destDir) : [];
-  if (existing.length > 0) {
-    return { status: 'skipped', count: existing.length };
+  // 只有完整下载过（存在 .done 标记）才跳过；半成品目录会重新补齐
+  const doneMark = path.join(destDir, '.done');
+  if (fs.existsSync(doneMark)) {
+    const count = fs.readdirSync(destDir).filter(f => f !== '.done').length;
+    return { status: 'skipped', count };
   }
 
   const imgUrls = await getAlbumImages(aid);
@@ -226,9 +228,9 @@ async function downloadAlbum(aid, title, destDir, page) {
 
   for (let i = 0; i < tasks.length; i += IMG_CONCURRENCY) {
     const batch = tasks.slice(i, i + IMG_CONCURRENCY);
-    await Promise.all(batch.map(async ({ url, dest }) => {
+    const results = await Promise.allSettled(batch.map(async ({ url, dest }) => {
       // 每张图片有 90s 总超时（HTTP 重试 + 浏览器 fallback）
-      const result = await Promise.race([
+      await Promise.race([
         (async () => {
           try {
             await download(url, dest, albumReferer);
@@ -252,8 +254,11 @@ async function downloadAlbum(aid, title, destDir, page) {
         })(),
         new Promise((_, reject) => setTimeout(() => reject(new Error('超时')), 90000)),
       ]);
-      downloaded++;
     }));
+    for (const r of results) {
+      if (r.status === 'fulfilled') downloaded++;
+      else failed++;
+    }
     // 每批之间加延迟
     if (i + IMG_CONCURRENCY < tasks.length) {
       await new Promise(r => setTimeout(r, 1200 + Math.random() * 800));
@@ -262,6 +267,9 @@ async function downloadAlbum(aid, title, destDir, page) {
 
   if (downloaded === 0 && failed > 0) {
     try { fs.rmdirSync(destDir); } catch { /* ok */ }
+  } else if (failed === 0) {
+    // 全部成功才写完成标记，下次运行据此跳过
+    fs.writeFileSync(doneMark, `${downloaded}/${tasks.length}\n`, 'utf-8');
   }
 
   return { status: 'done', downloaded, failed, total: imgUrls.length };

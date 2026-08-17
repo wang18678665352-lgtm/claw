@@ -402,13 +402,11 @@ async function downloadChapters(chapters, startNum, totalNum, slug, domain, outR
     return;
   }
 
-  // 分割章节到各组
+  // 分割章节到各组（连续分块，保证每组内编号连续，与 groupStart 计算一致）
   const groups = [];
-  for (let i = 0; i < parallel; i++) {
-    groups.push([]);
-  }
-  for (let i = 0; i < targetChapters.length; i++) {
-    groups[i % parallel].push(targetChapters[i]);
+  const perGroup = Math.ceil(targetChapters.length / parallel);
+  for (let i = 0; i < targetChapters.length; i += perGroup) {
+    groups.push(targetChapters.slice(i, i + perGroup));
   }
 
   // 计算每个组的起始编号

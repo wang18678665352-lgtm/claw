@@ -108,11 +108,17 @@ if (!URL || !URL.includes('bilibili.com/video/')) {
         // 传统 mp4/flv 地址（低画质时有）
         entry.mode = 'single';
         entry.urls = durl.map(d => ({ url: d.url, size: d.size }));
-        // 尝试下载第一个分段
+        // 下载所有分段（长视频可能被切成多段）
         console.log(`  [${entry.page}] qn=${quality} 直链模式，共${durl.length}段`);
-        const videoPath = path.join(outDir, `${sanitize(entry.page)}.mp4`);
-        await download(durl[0].url, videoPath, URL);
-        console.log(`  已下载: ${sanitize(entry.page)}.mp4`);
+        entry.segments = [];
+        for (let si = 0; si < durl.length; si++) {
+          const segName = durl.length > 1
+            ? `${sanitize(entry.page)}_${si + 1}.mp4`
+            : `${sanitize(entry.page)}.mp4`;
+          await download(durl[si].url, path.join(outDir, segName), URL);
+          entry.segments.push(segName);
+          console.log(`  已下载: ${segName}`);
+        }
       } else if (dash) {
         // DASH 模式（高画质）—— 音画分离，需要 ffmpeg 合并
         entry.mode = 'dash';
@@ -192,6 +198,9 @@ if (!URL || !URL.includes('bilibili.com/video/')) {
       md.push(`  - 视频: \`${path.basename(entry.videoFile)}\``);
       md.push(`  - 音频: \`${path.basename(entry.audioFile)}\``);
       md.push(`  - 合并命令: \`ffmpeg -i "${path.basename(entry.videoFile)}" -i "${path.basename(entry.audioFile)}" -c copy "${path.basename(entry.mergedFile)}"\``);
+    } else if (entry.segments && entry.segments.length > 1) {
+      md.push(`- **${entry.page}**: 已下载 ${entry.segments.length} 个分段（需按顺序合并）`);
+      entry.segments.forEach(s => md.push(`  - \`${s}\``));
     } else {
       md.push(`- **${entry.page}**: 已下载 ✓`);
     }
