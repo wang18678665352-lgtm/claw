@@ -109,27 +109,26 @@ async function scrollAndExtractImages(page) {
   // 先等容器出现
   await page.waitForTimeout(1500);
 
-  // 策略：使用 PageDown 键逐屏滚动，每次等待新图片加载
-  // 比 scrollBy 更接近真实用户行为，更容易触发懒加载
-  let prevCount = 0;
-  let staleSteps = 0;
+  // 站点提供本章总页数（.comicCount），作为滚动停止的硬依据
+  const expected = await page.evaluate(() => {
+    const el = document.querySelector('.comicCount');
+    const n = parseInt(el?.textContent || '', 10);
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  });
 
-  for (let s = 0; s < 200; s++) {
-    // 按 PageDown 翻一屏
-    await page.keyboard.press('PageDown');
-    await page.waitForTimeout(500);
-
-    // 统计当前页面上所有漫画图片
+  // 滚动过程中持续累积图片 URL（去 query 去重，排除广告/静态资源）
+  const seen = new Map();
+  const collect = async () => {
     const urls = await page.evaluate(() => {
       const results = [];
       document.querySelectorAll('img').forEach(img => {
-        // 检查 data-src 和 src
         const url = img.getAttribute('data-src') || img.getAttribute('src') || '';
-        // 过滤：只取有用的图片（排除图标、空白、base64等）
         if (
           url.startsWith('http') &&
           !url.includes('data:image') &&
           !url.includes('svg') &&
+          !url.includes('/ads/') &&
+          !url.includes('/static/') &&
           url.length > 30
         ) {
           results.push(url);
@@ -137,13 +136,30 @@ async function scrollAndExtractImages(page) {
       });
       return results;
     });
+    urls.forEach(u => seen.set(u.split('?')[0], u));
+  };
 
-    if (urls.length === prevCount) {
+  // 策略：使用 PageDown 键逐屏滚动，每次等待新图片加载
+  // 比 scrollBy 更接近真实用户行为，更容易触发懒加载
+  let staleSteps = 0;
+  let prevSize = 0;
+
+  for (let s = 0; s < 200; s++) {
+    // 按 PageDown 翻一屏
+    await page.keyboard.press('PageDown');
+    await page.waitForTimeout(500);
+
+    await collect();
+
+    if (seen.size === prevSize) {
       staleSteps++;
     } else {
       staleSteps = 0;
     }
-    prevCount = urls.length;
+    prevSize = seen.size;
+
+    // 已知总页数且已收集齐：提前结束
+    if (expected && seen.size >= expected) break;
 
     // 到最底部后再多滚几次确保触发所有懒加载
     const atBottom = await page.evaluate(
@@ -151,38 +167,17 @@ async function scrollAndExtractImages(page) {
     );
 
     if (atBottom) {
-      if (staleSteps >= 5) break;
+      if (staleSteps >= 8) break;
       // 到底了但还没稳定，小等一会
       await page.waitForTimeout(800);
     }
   }
 
-  // 最终提取：等所有图片稳定后统一提取
+  // 最终收集：等所有图片稳定后再收一次
   await page.waitForTimeout(1000);
+  await collect();
 
-  const finalUrls = await page.evaluate(() => {
-    const results = [];
-    const seen = new Set();
-
-    document.querySelectorAll('img').forEach(img => {
-      const url = img.getAttribute('data-src') || img.getAttribute('src') || '';
-      if (!url.startsWith('http')) return;
-
-      // 排除小图标、广告等
-      if (url.includes('svg') || url.length < 40) return;
-
-      // 去重
-      const key = url.split('?')[0]; // 去 query 参数比较
-      if (seen.has(key)) return;
-      seen.add(key);
-
-      results.push(url);
-    });
-
-    return results;
-  });
-
-  return finalUrls;
+  return [...seen.values()];
 }
 
 // ========== 单浏览器实例的章节下载器 ==========
