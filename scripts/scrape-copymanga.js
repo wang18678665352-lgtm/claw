@@ -55,8 +55,8 @@ function parseInput(input) {
   return { slug, domain };
 }
 
-/** 下载文件 */
-function download(url, dest, referer) {
+/** 下载文件（socket 挂起时超时重试，避免整个实例卡死） */
+function download(url, dest, referer, retries = 2) {
   return new Promise((resolve, reject) => {
     const mod = url.startsWith('https') ? https : http;
     const opts = {
@@ -66,15 +66,31 @@ function download(url, dest, referer) {
       },
       timeout: 30000,
     };
-    mod.get(url, opts, (res) => {
+    const req = mod.get(url, opts, (res) => {
       if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-        return download(new URL(res.headers.location, url).href, dest, referer).then(resolve).catch(reject);
+        res.resume();
+        return download(new URL(res.headers.location, url).href, dest, referer, retries).then(resolve).catch(reject);
       }
-      if (res.statusCode !== 200) return reject(new Error(`HTTP ${res.statusCode}`));
+      if (res.statusCode !== 200) {
+        res.resume();
+        return reject(new Error(`HTTP ${res.statusCode}`));
+      }
       const file = fs.createWriteStream(dest);
       res.pipe(file);
       file.on('finish', () => { file.close(); resolve(); });
-    }).on('error', reject);
+      const onErr = (e) => { try { file.close(); fs.unlinkSync(dest); } catch { /* ok */ } reject(e); };
+      file.on('error', onErr);
+      res.on('error', onErr);
+    });
+    req.on('error', reject);
+    req.on('timeout', () => {
+      req.destroy();
+      if (retries > 0) {
+        setTimeout(() => download(url, dest, referer, retries - 1).then(resolve).catch(reject), 2000);
+      } else {
+        reject(new Error('下载超时'));
+      }
+    });
   });
 }
 
