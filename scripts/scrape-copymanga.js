@@ -297,6 +297,7 @@ async function downloadChapters(chapters, startNum, totalNum, slug, domain, outR
     console.log('  --all         下载全部（等价于 --start 1）');
     console.log('  --parallel N  并行浏览器实例数（默认 1）');
     console.log('  --output DIR  输出目录（默认 ./downloads）');
+    console.log('  --list        只列出章节（带序号）不下载');
     console.log('');
     console.log('示例:');
     console.log('  node scripts/scrape-copymanga.js jinyuqi --latest 5');
@@ -358,6 +359,15 @@ async function downloadChapters(chapters, startNum, totalNum, slug, domain, outR
   }
 
   console.log(`共 ${chapters.length} 话（去重后）\n`);
+
+  // --list：只打印章节列表（带下载序号）后退出，不下载
+  if (args.includes('--list')) {
+    chapters.forEach((c, i) => {
+      console.log(`  ${String(i + 1).padStart(String(chapters.length).length, ' ')}. ${c.label}`);
+    });
+    await context.close();
+    return;
+  }
 
   // ========== 确定下载范围 ==========
   let targetChapters;
