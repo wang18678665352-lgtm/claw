@@ -30,6 +30,7 @@ debug-copy.png
 
 # Notes & articles
 *.md
+!README.md
 bilibili-Claude Code + Playwright = 疯狂的/
 zhihu-*/
 
