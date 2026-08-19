@@ -294,6 +294,11 @@ async function downloadChapters(chapters, startNum, totalNum, slug, domain, outR
 
       downloaded += chapterOk;
       failed += chapterFail;
+
+      // 章节间间隔，降低触发限流的概率
+      if (ci + 1 < chapters.length) {
+        await page.waitForTimeout(2000 + Math.random() * 2000);
+      }
     }
   } finally {
     await context.close();
