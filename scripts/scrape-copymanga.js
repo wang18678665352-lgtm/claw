@@ -139,12 +139,18 @@ async function scrollAndExtractImages(page) {
     urls.forEach(u => seen.set(u.split('?')[0], u));
   };
 
-  // 策略：使用 PageDown 键逐屏滚动，每次等待新图片加载
-  // 比 scrollBy 更接近真实用户行为，更容易触发懒加载
+  // 策略：使用 PageDown 键逐屏滚动 —— 该站点的图片分批加载由键盘 PageDown 触发
+  // （JS scrollTo/scrollBy 无效）。先点击页面确保键盘事件落在页面上。
+  try {
+    await page.mouse.click(640, 400);
+  } catch { /* ok */ }
+
   let staleSteps = 0;
   let prevSize = 0;
+  // 每次 PageDown 约加载 10 张，步数上限按总页数留足余量
+  const maxSteps = expected ? expected + 60 : 200;
 
-  for (let s = 0; s < 200; s++) {
+  for (let s = 0; s < maxSteps; s++) {
     // 按 PageDown 翻一屏
     await page.keyboard.press('PageDown');
     await page.waitForTimeout(500);
@@ -167,7 +173,9 @@ async function scrollAndExtractImages(page) {
     );
 
     if (atBottom) {
-      if (staleSteps >= 8) break;
+      // 已知总页数但没集齐（可能被限流）：更有耐心，多等多试
+      const staleLimit = expected && seen.size < expected ? 30 : 8;
+      if (staleSteps >= staleLimit) break;
       // 到底了但还没稳定，小等一会
       await page.waitForTimeout(800);
     }
