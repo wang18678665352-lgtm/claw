@@ -19,7 +19,7 @@
 | `scripts/bilibili-login.js` | B 站扫码登录，保存登录态 |
 | `scripts/scrape-zhihu.js` | 知乎文章正文 + 图片导出 Markdown |
 | `scripts/scrape-images.js` | Google/Bing 图片批量下载 |
-| `scripts/scrape-wn04.js` | 紳士漫畫单专辑下载 |
+| `scripts/scrape-wn04.js` | 紳士漫畫单专辑下载 / 日周月年榜各题材前 N 批量下载 |
 | `scripts/scrape-wn04-bookshelf.js` | 紳士漫畫书架按分类批量下载（需登录） |
 
 ## 拷贝漫画（copymanga）
@@ -72,6 +72,11 @@ node scripts/scrape-images.js "cat"
 
 # 紳士漫畫单专辑
 node scripts/scrape-wn04.js "https://www.wn04.cfd/photos-index-aid-359672.html"
+
+# 紳士漫畫排行榜：全部题材 × 日/周/月榜 × 每榜前 10，递归保存到 downloads/wn04-rankings/<榜单>/<题材>/<排名-标题>/
+node scripts/scrape-wn04.js --rankings
+node scripts/scrape-wn04.js --rankings --top 20 --types week,month   # 每榜前 20，只爬周/月榜
+node scripts/scrape-wn04.js --rankings --cates 5,2,37                 # 只爬指定题材 id（默认 all，自动从首页发现）
 
 # 紳士漫畫书架（首次运行会打开浏览器要求登录）
 node scripts/scrape-wn04-bookshelf.js --parallel 2
